@@ -45,103 +45,111 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final PasswordEncoder passwordEncoder;
+  private final PasswordEncoder passwordEncoder;
 
-    @Bean
-    @Order(1)
-    SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
-            throws Exception {
-        OAuth2AuthorizationServerConfigurer authorizationServerConfigurer =
-                OAuth2AuthorizationServerConfigurer.authorizationServer();
-        http.securityMatcher(authorizationServerConfigurer.getEndpointsMatcher())
-                .with(authorizationServerConfigurer, (authorizationServer) ->
-                        authorizationServer.oidc(Customizer.withDefaults()))
-                .authorizeHttpRequests((authorize) ->
-                        authorize.anyRequest().authenticated())
-                .exceptionHandling((exceptions) -> exceptions
-                        .defaultAuthenticationEntryPointFor(
-                                new LoginUrlAuthenticationEntryPoint("/login"),
-                                new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
-                        )
-                );
-        return http.build();
+  @Bean
+  @Order(1)
+  SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
+      throws Exception {
+    OAuth2AuthorizationServerConfigurer authorizationServerConfigurer =
+        OAuth2AuthorizationServerConfigurer.authorizationServer();
+    http.securityMatcher("/oauth2/**")
+        .with(authorizationServerConfigurer, (authorizationServer) ->
+            authorizationServer.oidc(Customizer.withDefaults()))
+        .authorizeHttpRequests((authorize) ->
+            authorize.anyRequest().authenticated())
+        .cors(Customizer.withDefaults())
+        .exceptionHandling((exceptions) -> exceptions
+            .defaultAuthenticationEntryPointFor(
+                new LoginUrlAuthenticationEntryPoint("/login"),
+                new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
+            )
+        )
+        .logout(logout -> logout
+            .logoutUrl("/logout")
+            .logoutSuccessUrl("http://localhost:4200/login")
+            .invalidateHttpSession(true)
+            .clearAuthentication(true)
+            .deleteCookies("JSESSIONID", "OAUTH2_AUTHORIZATION_REQUEST")
+        );
+    return http.build();
+  }
+
+  @Bean
+  @Order(2)
+  SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests((authorize) -> authorize.anyRequest().authenticated())
+        .cors(Customizer.withDefaults())
+        .csrf(AbstractHttpConfigurer::disable)
+        .formLogin(Customizer.withDefaults());
+    return http.build();
+  }
+
+  @Bean
+  RegisteredClientRepository registeredClientRepository() {
+    RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
+        .clientId("gateway")
+        .clientSecret(passwordEncoder.encode(Constants.CLIENT_SECRET))
+        .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+        .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+        .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+        .redirectUri("http://localhost:4200/callback")
+        .scope(OidcScopes.OPENID)
+        .scope(OidcScopes.PROFILE)
+        .clientSettings(ClientSettings.builder().requireAuthorizationConsent(false).build())
+        .build();
+
+    return new InMemoryRegisteredClientRepository(oidcClient);
+  }
+
+  @Bean
+  JWKSource<SecurityContext> jwkSource() {
+    KeyPair keyPair = generateRsaKey();
+    RSAPublicKey publicKey = (RSAPublicKey) keyPair.getPublic();
+    RSAPrivateKey privateKey = (RSAPrivateKey) keyPair.getPrivate();
+    RSAKey rsaKey = new RSAKey.Builder(publicKey)
+        .privateKey(privateKey)
+        .keyID(UUID.randomUUID().toString())
+        .build();
+    JWKSet jwkSet = new JWKSet(rsaKey);
+    return new ImmutableJWKSet<>(jwkSet);
+  }
+
+  private static KeyPair generateRsaKey() {
+    KeyPair keyPair;
+    try {
+      KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+      keyPairGenerator.initialize(2048);
+      keyPair = keyPairGenerator.generateKeyPair();
+    } catch (Exception ex) {
+      throw new IllegalStateException(ex);
     }
+    return keyPair;
+  }
 
-    @Bean
-    @Order(2)
-    SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
-        http.authorizeHttpRequests((authorize) -> authorize.anyRequest().authenticated())
-                .csrf(AbstractHttpConfigurer::disable)
-                .formLogin(Customizer.withDefaults());
-        return http.build();
-    }
+  @Bean
+  JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
+    return OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
+  }
 
-    @Bean
-    RegisteredClientRepository registeredClientRepository() {
-        RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("gateway")
-                .clientSecret(passwordEncoder.encode(Constants.CLIENT_SECRET))
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri("http://127.0.0.1:9090/login/oauth2/code/client-app")
-                .redirectUri("http://127.0.0.1:9090/authorized")
-                .postLogoutRedirectUri("http://127.0.0.1:9090/logout")
-                .scope(OidcScopes.OPENID)
-                .scope(OidcScopes.PROFILE)
-                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(false).build())
-                .build();
+  @Bean
+  AuthorizationServerSettings authorizationServerSettings() {
+    return AuthorizationServerSettings.builder().build();
+  }
 
-        return new InMemoryRegisteredClientRepository(oidcClient);
-    }
+  @Bean
+  OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer() {
+    return context -> {
+      if (context.getTokenType().getValue().equals(OAuth2TokenType.ACCESS_TOKEN.getValue())) {
+        Authentication authentication = context.getPrincipal();
+        context.getClaims()
+            .claim("roles",
+                authentication.getAuthorities()
+                    .stream()
+                    .map(GrantedAuthority::getAuthority)
+                    .toList());
+      }
+    };
+  }
 
-    @Bean
-    JWKSource<SecurityContext> jwkSource() {
-        KeyPair keyPair = generateRsaKey();
-        RSAPublicKey publicKey = (RSAPublicKey) keyPair.getPublic();
-        RSAPrivateKey privateKey = (RSAPrivateKey) keyPair.getPrivate();
-        RSAKey rsaKey = new RSAKey.Builder(publicKey)
-                .privateKey(privateKey)
-                .keyID(UUID.randomUUID().toString())
-                .build();
-        JWKSet jwkSet = new JWKSet(rsaKey);
-        return new ImmutableJWKSet<>(jwkSet);
-    }
-
-    private static KeyPair generateRsaKey() {
-        KeyPair keyPair;
-        try {
-            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-            keyPairGenerator.initialize(2048);
-            keyPair = keyPairGenerator.generateKeyPair();
-        } catch (Exception ex) {
-            throw new IllegalStateException(ex);
-        }
-        return keyPair;
-    }
-
-    @Bean
-    JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
-        return OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
-    }
-
-    @Bean
-    AuthorizationServerSettings authorizationServerSettings() {
-        return AuthorizationServerSettings.builder().build();
-    }
-
-    @Bean
-    OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer() {
-        return context -> {
-            if (context.getTokenType().getValue().equals(OAuth2TokenType.ACCESS_TOKEN.getValue())) {
-                Authentication authentication = context.getPrincipal();
-                context.getClaims()
-                        .claim("roles",
-                                authentication.getAuthorities()
-                                        .stream()
-                                        .map(GrantedAuthority::getAuthority)
-                                        .toList());
-            }
-        };
-    }
 }
