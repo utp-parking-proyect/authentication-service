@@ -1,9 +1,18 @@
 spring:
   application:
     name: authentication
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
 server:
   port: 9000
 eureka:
   client:
     service-url:
       defaultZone: http://localhost:${EUREKA_SERVER_PORT}/eureka/
+
+logging:
+  level:
+    com.utp.authentication: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.web.reactive: DEBUG
