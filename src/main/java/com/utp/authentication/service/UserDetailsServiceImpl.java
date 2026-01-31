@@ -2,6 +2,7 @@ package com.utp.authentication.service;
 
 import com.utp.authentication.model.dto.User;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -14,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RequiredArgsConstructor
 @Service
 public class UserDetailsServiceImpl implements UserDetailsService {
@@ -22,6 +24,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
   @Override
   public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    log.debug("Attempting to load user: {}", username);
     Map<String, String> params = new HashMap<>();
     params.put("username", username);
     try {
@@ -31,7 +34,15 @@ public class UserDetailsServiceImpl implements UserDetailsService {
           .retrieve()
           .bodyToMono(User.class)
           .block();
-      assert user != null;
+
+      if (user == null) {
+        log.error("User returned null from users-service: {}", username);
+        throw new UsernameNotFoundException("User not found: " + username);
+      }
+
+      log.debug("User loaded successfully: {}", username);
+      log.debug("User roles: {}", user.getRoles());
+
       List<GrantedAuthority> roles = user.getRoles().stream()
           .map(role -> (GrantedAuthority) role::getName)
           .toList();
@@ -43,7 +54,12 @@ public class UserDetailsServiceImpl implements UserDetailsService {
           true,
           roles);
     } catch (WebClientResponseException e) {
-      throw new UsernameNotFoundException("User not found");
+      log.error("WebClient error loading user {}: Status={}, Body={}",
+          username, e.getStatusCode(), e.getResponseBodyAsString());
+      throw new UsernameNotFoundException("User not found: " + username);
+    } catch (Exception e) {
+      log.error("Error loading user {}: {}", username, e.getMessage(), e);
+      throw new UsernameNotFoundException("Error loading user: " + username + " - " + e.getMessage());
     }
   }
 }

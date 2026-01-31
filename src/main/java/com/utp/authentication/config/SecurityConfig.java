@@ -11,11 +11,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
@@ -46,6 +50,7 @@ import java.util.UUID;
 public class SecurityConfig {
 
   private final PasswordEncoder passwordEncoder;
+  private final UserDetailsService userDetailsService;
 
   @Bean
   @Order(1)
@@ -59,9 +64,13 @@ public class SecurityConfig {
         .authorizeHttpRequests((authorize) ->
             authorize.anyRequest().authenticated())
         .cors(Customizer.withDefaults())
+        .formLogin(form -> form
+            .loginPage("/custom-login")
+            .permitAll()
+        )
         .exceptionHandling((exceptions) -> exceptions
             .defaultAuthenticationEntryPointFor(
-                new LoginUrlAuthenticationEntryPoint("/login"),
+                new LoginUrlAuthenticationEntryPoint("/custom-login"),
                 new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
             )
         )
@@ -78,10 +87,15 @@ public class SecurityConfig {
   @Bean
   @Order(2)
   SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
-    http.authorizeHttpRequests((authorize) -> authorize.anyRequest().authenticated())
+    http.authorizeHttpRequests((authorize) -> authorize
+            .requestMatchers("/api/auth/**", "/api/password-util/**").permitAll()
+            .anyRequest().authenticated())
         .cors(Customizer.withDefaults())
         .csrf(AbstractHttpConfigurer::disable)
-        .formLogin(Customizer.withDefaults());
+        .formLogin(form -> form
+            .loginPage("/custom-login")
+            .permitAll()
+        );
     return http.build();
   }
 
@@ -150,6 +164,14 @@ public class SecurityConfig {
                     .toList());
       }
     };
+  }
+
+  @Bean
+  AuthenticationManager authenticationManager() {
+    DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
+    authProvider.setUserDetailsService(userDetailsService);
+    authProvider.setPasswordEncoder(passwordEncoder);
+    return new ProviderManager(authProvider);
   }
 
 }
