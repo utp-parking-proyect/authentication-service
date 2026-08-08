@@ -3,6 +3,7 @@ package com.utp.authentication.service;
 import com.utp.authentication.model.dto.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NullMarked;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -23,6 +24,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
   private final WebClient.Builder webClient;
 
   @Override
+  @NullMarked
   public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
     log.debug("Attempting to load user: {}", username);
     Map<String, String> params = new HashMap<>();

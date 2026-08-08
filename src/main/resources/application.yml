@@ -1,9 +1,6 @@
 spring:
   application:
     name: authentication
-  thymeleaf:
-    prefix: classpath:/templates/
-    suffix: .html
 server:
   port: 9000
 eureka:

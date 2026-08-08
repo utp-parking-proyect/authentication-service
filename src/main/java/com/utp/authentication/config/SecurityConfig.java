@@ -5,39 +5,18 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
-import com.utp.authentication.util.constants.Constants;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.annotation.Order;
-import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.core.AuthorizationGrantType;
-import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
-import org.springframework.security.oauth2.core.oidc.OidcScopes;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
-import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
-import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
-import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
-import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
-import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
-import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
-import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
-import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -53,67 +32,13 @@ public class SecurityConfig {
   private final UserDetailsService userDetailsService;
 
   @Bean
-  @Order(1)
-  SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
-      throws Exception {
-    OAuth2AuthorizationServerConfigurer authorizationServerConfigurer =
-        OAuth2AuthorizationServerConfigurer.authorizationServer();
-    http.securityMatcher("/oauth2/**")
-        .with(authorizationServerConfigurer, (authorizationServer) ->
-            authorizationServer.oidc(Customizer.withDefaults()))
-        .authorizeHttpRequests((authorize) ->
-            authorize.anyRequest().authenticated())
-        .cors(Customizer.withDefaults())
-        .formLogin(form -> form
-            .loginPage("/custom-login")
-            .permitAll()
-        )
-        .exceptionHandling((exceptions) -> exceptions
-            .defaultAuthenticationEntryPointFor(
-                new LoginUrlAuthenticationEntryPoint("/custom-login"),
-                new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
-            )
-        )
-        .logout(logout -> logout
-            .logoutUrl("/logout")
-            .logoutSuccessUrl("http://localhost:4200/login")
-            .invalidateHttpSession(true)
-            .clearAuthentication(true)
-            .deleteCookies("JSESSIONID", "OAUTH2_AUTHORIZATION_REQUEST")
-        );
-    return http.build();
-  }
-
-  @Bean
-  @Order(2)
-  SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
-    http.authorizeHttpRequests((authorize) -> authorize
+  SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) {
+    http.authorizeHttpRequests(authorize -> authorize
             .requestMatchers("/api/auth/**", "/api/password-util/**").permitAll()
             .anyRequest().authenticated())
         .cors(Customizer.withDefaults())
-        .csrf(AbstractHttpConfigurer::disable)
-        .formLogin(form -> form
-            .loginPage("/custom-login")
-            .permitAll()
-        );
+        .csrf(AbstractHttpConfigurer::disable);
     return http.build();
-  }
-
-  @Bean
-  RegisteredClientRepository registeredClientRepository() {
-    RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
-        .clientId("gateway")
-        .clientSecret(passwordEncoder.encode(Constants.CLIENT_SECRET))
-        .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-        .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-        .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-        .redirectUri("http://localhost:4200/callback")
-        .scope(OidcScopes.OPENID)
-        .scope(OidcScopes.PROFILE)
-        .clientSettings(ClientSettings.builder().requireAuthorizationConsent(false).build())
-        .build();
-
-    return new InMemoryRegisteredClientRepository(oidcClient);
   }
 
   @Bean
@@ -142,36 +67,9 @@ public class SecurityConfig {
   }
 
   @Bean
-  JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
-    return OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
-  }
-
-  @Bean
-  AuthorizationServerSettings authorizationServerSettings() {
-    return AuthorizationServerSettings.builder().build();
-  }
-
-  @Bean
-  OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer() {
-    return context -> {
-      if (context.getTokenType().getValue().equals(OAuth2TokenType.ACCESS_TOKEN.getValue())) {
-        Authentication authentication = context.getPrincipal();
-        context.getClaims()
-            .claim("roles",
-                authentication.getAuthorities()
-                    .stream()
-                    .map(GrantedAuthority::getAuthority)
-                    .toList());
-      }
-    };
-  }
-
-  @Bean
   AuthenticationManager authenticationManager() {
-    DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-    authProvider.setUserDetailsService(userDetailsService);
+    DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider(userDetailsService);
     authProvider.setPasswordEncoder(passwordEncoder);
     return new ProviderManager(authProvider);
   }
-
 }
