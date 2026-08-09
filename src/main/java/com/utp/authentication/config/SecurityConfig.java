@@ -34,7 +34,7 @@ public class SecurityConfig {
   @Bean
   SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) {
     http.authorizeHttpRequests(authorize -> authorize
-            .requestMatchers("/api/auth/**", "/api/password-util/**").permitAll()
+            .requestMatchers("/api/auth/**", "/api/password-util/**", "/oauth2/jwks").permitAll()
             .anyRequest().authenticated())
         .cors(Customizer.withDefaults())
         .csrf(AbstractHttpConfigurer::disable);
@@ -42,14 +42,18 @@ public class SecurityConfig {
   }
 
   @Bean
-  JWKSource<SecurityContext> jwkSource() {
+  RSAKey rsaKey() {
     KeyPair keyPair = generateRsaKey();
     RSAPublicKey publicKey = (RSAPublicKey) keyPair.getPublic();
     RSAPrivateKey privateKey = (RSAPrivateKey) keyPair.getPrivate();
-    RSAKey rsaKey = new RSAKey.Builder(publicKey)
+    return new RSAKey.Builder(publicKey)
         .privateKey(privateKey)
         .keyID(UUID.randomUUID().toString())
         .build();
+  }
+
+  @Bean
+  JWKSource<SecurityContext> jwkSource(RSAKey rsaKey) {
     JWKSet jwkSet = new JWKSet(rsaKey);
     return new ImmutableJWKSet<>(jwkSet);
   }
