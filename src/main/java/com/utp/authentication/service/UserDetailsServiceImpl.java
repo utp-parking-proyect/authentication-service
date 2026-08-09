@@ -36,13 +36,12 @@ public class UserDetailsServiceImpl implements UserDetailsService {
           .retrieve()
           .bodyToMono(User.class)
           .block();
-
       if (user == null) {
         log.error("User returned null from users-service: {}", username);
         throw new UsernameNotFoundException("User not found: " + username);
       }
 
-      log.debug("User loaded successfully: {}", username);
+      log.debug("User loaded successfully: {}", user.getUsername());
       log.debug("User roles: {}", user.getRoles());
 
       List<GrantedAuthority> roles = user.getRoles().stream()
