@@ -49,10 +49,10 @@ public class AuthenticationController {
       Map<String, String> params = new HashMap<>();
       params.put("username", request.getUsername());
 
-      log.debug("Fetching user details from users-service for: {}", request.getUsername());
+      log.debug("Fetching user details from business-core-portal for: {}", request.getUsername());
       User user = webClient.build()
           .get()
-          .uri("/username/{username}", params)
+          .uri("/users/username/{username}", params)
           .retrieve()
           .bodyToMono(User.class)
           .block();
@@ -60,7 +60,7 @@ public class AuthenticationController {
       if (user != null) {
         log.debug("User details fetched successfully. UserId: {}", user.getIdUser());
       } else {
-        log.warn("User details returned null from users-service");
+        log.warn("User details returned null from business-core-portal");
       }
 
       String token = jwtService.generateToken(userDetails, user != null ? user.getIdUser() : null);
