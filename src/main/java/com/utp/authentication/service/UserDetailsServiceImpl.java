@@ -32,12 +32,12 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     try {
       User user = webClient.build()
           .get()
-          .uri("/username/{username}", params)
+          .uri("/users/username/{username}", params)
           .retrieve()
           .bodyToMono(User.class)
           .block();
       if (user == null) {
-        log.error("User returned null from users-service: {}", username);
+        log.error("User returned null from business-core-portal: {}", username);
         throw new UsernameNotFoundException("User not found: " + username);
       }
 

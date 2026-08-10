@@ -11,7 +11,7 @@ public class AppConfig {
 
     @Bean
     WebClient.Builder webClient() {
-        return WebClient.builder().baseUrl("http://localhost:9001");
+        return WebClient.builder().baseUrl("http://localhost:9001/utp-portal/v1");
     }
 
     @Bean
